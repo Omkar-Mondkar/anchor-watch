@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment secrets (NEVER commit .env)
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+*.egg
+
+# Certificates and keys (NEVER commit)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Docker
+.dockerignore
+
+# Editor artifacts
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store

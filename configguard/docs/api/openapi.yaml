@@ -1,0 +1,1136 @@
+openapi: 3.1.0
+
+info:
+  title: ConfigGuard API
+  description: |
+    Enterprise Configuration Baseline & Drift Detection Platform.
+    
+    Monitors, validates, and alerts on configuration drift across Linux trading infrastructure servers.
+    
+    ## Authentication
+    All endpoints (except `/auth/login`) require a Bearer JWT in the `Authorization` header.
+    
+    ## Agent Endpoints
+    Endpoints under `/agent/*` are called by the Python agent running on Linux hosts.
+    They use a short-lived JWT issued during agent enrollment.
+  version: 1.0.0
+  contact:
+    name: Global Markets Infrastructure Team
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local development
+  - url: https://{host}/api
+    description: Corporate production
+    variables:
+      host:
+        default: configguard.corp.com
+
+tags:
+  - name: Auth
+    description: Authentication and token management
+  - name: Servers
+    description: Server onboarding and management
+  - name: Profiles
+    description: Server profile management
+  - name: Agent
+    description: Agent-facing endpoints (called by Python agent on Linux hosts)
+  - name: Baselines
+    description: Configuration baseline management
+  - name: Drift
+    description: Drift records and diff analysis
+  - name: Alerts
+    description: Alert management
+  - name: Monitoring
+    description: Corporate monitoring tool integration
+  - name: Webhooks
+    description: Open webhook API for external drift event injection
+  - name: Audit
+    description: Immutable audit log
+  - name: Compliance
+    description: Fleet-wide compliance reporting
+  - name: Schedules
+    description: Validation schedule management
+
+security:
+  - BearerAuth: []
+
+# ── Paths ──────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Auth ──────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and receive JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin@corp.com
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+                  expiresIn:
+                    type: string
+                    example: 8h
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      username: { type: string }
+                      role: { type: string, enum: [admin, engineer, auditor] }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  expiresIn: { type: string }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Servers ───────────────────────────────────────────────────────
+
+  /servers:
+    get:
+      tags: [Servers]
+      summary: List all servers
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: environment
+          in: query
+          schema: { type: string, enum: [PROD, UAT, DR] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, inactive, decommissioned] }
+        - name: enrollmentStatus
+          in: query
+          schema: { type: string, enum: [pending, enrolled, revoked] }
+      responses:
+        '200':
+          description: Paginated server list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServers'
+    post:
+      tags: [Servers]
+      summary: Onboard a new server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hostname, ip, environment]
+              properties:
+                hostname:     { type: string, example: TNSI1 }
+                ip:           { type: string, example: 10.0.0.10 }
+                environment:  { type: string, enum: [PROD, UAT, DR] }
+                profileId:    { type: string, description: Optional ServerProfile ID }
+      responses:
+        '201':
+          description: Server onboarded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Server' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /servers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Servers]
+      summary: Get server detail
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Server' }
+          description: Server detail
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Servers]
+      summary: Update server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ip:          { type: string }
+                environment: { type: string, enum: [PROD, UAT, DR] }
+                profileId:   { type: string }
+                status:      { type: string, enum: [active, inactive, decommissioned] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Server' }
+          description: Updated server
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Servers]
+      summary: Decommission server
+      responses:
+        '204': { description: Server decommissioned }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /servers/{id}/enroll:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Agent]
+      summary: Issue a one-time enrollment token for a server
+      responses:
+        '200':
+          description: Enrollment token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:     { type: string, description: One-time enrollment token }
+                  expiresAt: { type: string, format: date-time }
+
+  /servers/{id}/baselines:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Baselines]
+      summary: List all baseline versions for a server
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: Baseline version list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:  { type: array, items: { $ref: '#/components/schemas/Baseline' } }
+                  total: { type: integer }
+    post:
+      tags: [Baselines]
+      summary: Create a new baseline from the current live snapshot
+      responses:
+        '201':
+          description: Baseline created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Baseline' }
+
+  /servers/{id}/drift:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Drift]
+      summary: Get current drift records for a server
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, ack, resolved] }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [INFO, WARNING, CRITICAL] }
+      responses:
+        '200':
+          description: Drift records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:  { type: array, items: { $ref: '#/components/schemas/Drift' } }
+                  total: { type: integer }
+
+  /servers/{id}/diff:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Drift]
+      summary: Get structured diff for a server (live vs baseline)
+      parameters:
+        - name: mode
+          in: query
+          required: true
+          schema: { type: string, enum: [side-by-side, inline, json] }
+        - name: baselineId
+          in: query
+          schema: { type: string, description: Defaults to current active baseline }
+      responses:
+        '200':
+          description: Structured diff result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mode:       { type: string }
+                  serverId:   { type: string }
+                  baselineId: { type: string }
+                  diffs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category:      { type: string }
+                        parameter:     { type: string }
+                        baselineValue: {}
+                        currentValue:  {}
+                        severity:      { type: string, enum: [INFO, WARNING, CRITICAL] }
+
+  # ── Profiles ──────────────────────────────────────────────────────
+
+  /profiles:
+    get:
+      tags: [Profiles]
+      summary: List server profiles
+      responses:
+        '200':
+          description: Profile list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ServerProfile' } }
+    post:
+      tags: [Profiles]
+      summary: Create a server profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:            { type: string }
+                description:     { type: string }
+                collectorConfig:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      category:  { type: string }
+                      enabled:   { type: boolean }
+                      watchPaths:{ type: array, items: { type: string } }
+                tags:            { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Profile created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerProfile' }
+
+  /profiles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Profiles]
+      summary: Get profile detail
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerProfile' }
+          description: Profile detail
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Profiles]
+      summary: Update profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServerProfile' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerProfile' }
+          description: Updated profile
+
+  # ── Agent ─────────────────────────────────────────────────────────
+
+  /agent/register:
+    post:
+      tags: [Agent]
+      summary: Exchange one-time enrollment token for a JWT (agent-facing)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverId, token]
+              properties:
+                serverId: { type: string }
+                token:    { type: string, description: One-time token from /servers/:id/enroll }
+      responses:
+        '200':
+          description: JWT issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  expiresIn:   { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /agent/heartbeat:
+    post:
+      tags: [Agent]
+      summary: Lightweight check-in when snapshot is unchanged (agent-facing)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverId, checksum]
+              properties:
+                serverId: { type: string }
+                checksum: { type: string, description: SHA-256 of unchanged snapshot }
+      responses:
+        '200':
+          description: Heartbeat acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /agent/upload:
+    post:
+      tags: [Agent]
+      summary: Upload full normalized configuration snapshot (agent-facing)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverId, checksum, snapshot]
+              properties:
+                serverId: { type: string }
+                checksum: { type: string }
+                snapshot:
+                  type: object
+                  description: Normalized output keyed by collector category
+                  additionalProperties:
+                    type: object
+                    additionalProperties: {}
+      responses:
+        '202':
+          description: Snapshot accepted for processing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:   { type: string, example: accepted }
+                  jobId:    { type: string }
+
+  # ── Baselines ─────────────────────────────────────────────────────
+
+  /baselines/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Baselines]
+      summary: Get baseline detail
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Baseline' }
+          description: Baseline detail
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /baselines/{id}/approve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Baselines]
+      summary: Approve a baseline (requires Engineer or Admin role)
+      responses:
+        '200':
+          description: Baseline approved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Baseline' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ── Drift ─────────────────────────────────────────────────────────
+
+  /drift/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Drift]
+      summary: Get drift record detail
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Drift' }
+          description: Drift detail
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /drift/{id}/acknowledge:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Drift]
+      summary: Acknowledge a drift record
+      responses:
+        '200':
+          description: Drift acknowledged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Drift' }
+
+  # ── Alerts ────────────────────────────────────────────────────────
+
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, sent, failed, resolved] }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [INFO, WARNING, CRITICAL] }
+        - name: serverId
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:  { type: array, items: { $ref: '#/components/schemas/Alert' } }
+                  total: { type: integer }
+
+  /alerts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Alerts]
+      summary: Get alert detail
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+          description: Alert detail
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /alerts/{id}/resolve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Alerts]
+      summary: Resolve an alert
+      responses:
+        '200':
+          description: Alert resolved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Alert' }
+
+  # ── Monitoring Tool ───────────────────────────────────────────────
+
+  /monitor/cards:
+    get:
+      tags: [Monitoring]
+      summary: List monitoring tool card mappings
+      responses:
+        '200':
+          description: MonitorCard list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/MonitorCard' } }
+    post:
+      tags: [Monitoring]
+      summary: Register a new monitoring card
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorCardInput'
+      responses:
+        '201':
+          description: Card registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonitorCard' }
+
+  /monitor/cards/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Monitoring]
+      summary: Update a monitoring card
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MonitorCardInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonitorCard' }
+          description: Updated card
+
+  /monitor/signal:
+    post:
+      tags: [Monitoring]
+      summary: Manually trigger a monitoring tool signal for a drift record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [driftId]
+              properties:
+                driftId:     { type: string }
+                monitoringId:
+                  type: string
+                  pattern: '^\d{5}$'
+                  description: Override card monitoringId (optional)
+      responses:
+        '200':
+          description: Signal dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:      { type: string, example: sent }
+                  monitoringId:{ type: string }
+                  exitCode:    { type: integer }
+
+  # ── Webhooks ──────────────────────────────────────────────────────
+
+  /webhooks/drift:
+    post:
+      tags: [Webhooks]
+      summary: Receive external drift event (open webhook)
+      description: |
+        External systems can POST drift events to this endpoint.
+        ConfigGuard validates the HMAC signature and routes the event
+        through the same alert pipeline as internally detected drift.
+        
+        **Signature**: Compute HMAC-SHA256 of the raw request body using `WEBHOOK_SECRET`.
+        Set the result as `X-Webhook-Signature: sha256=<hex>`.
+      security: []
+      parameters:
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+            example: sha256=abc123...
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverId, parameter, currentValue, severity]
+              properties:
+                serverId:      { type: string }
+                category:      { type: string }
+                parameter:     { type: string }
+                baselineValue: {}
+                currentValue:  {}
+                severity:      { type: string, enum: [INFO, WARNING, CRITICAL] }
+                source:        { type: string, description: Optional source system identifier }
+      responses:
+        '200':
+          description: Webhook accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:  { type: string, example: accepted }
+                  driftId: { type: string }
+        '401':
+          description: Invalid or missing webhook signature
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # ── Audit ─────────────────────────────────────────────────────────
+
+  /audit:
+    get:
+      tags: [Audit]
+      summary: Query the immutable audit log
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+        - name: entity
+          in: query
+          schema: { type: string }
+        - name: entityId
+          in: query
+          schema: { type: string }
+        - name: user
+          in: query
+          schema: { type: string }
+        - name: startDate
+          in: query
+          schema: { type: string, format: date }
+        - name: endDate
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Paginated audit log
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:  { type: array, items: { $ref: '#/components/schemas/Audit' } }
+                  total: { type: integer }
+
+  # ── Compliance ────────────────────────────────────────────────────
+
+  /compliance/summary:
+    get:
+      tags: [Compliance]
+      summary: Fleet-wide compliance summary
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string, enum: [PROD, UAT, DR] }
+      responses:
+        '200':
+          description: Compliance summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalServers:      { type: integer }
+                  compliantServers:  { type: integer }
+                  driftedServers:    { type: integer }
+                  criticalAlerts:    { type: integer }
+                  lastUpdated:       { type: string, format: date-time }
+
+  /compliance/servers:
+    get:
+      tags: [Compliance]
+      summary: Per-server compliance status
+      parameters:
+        - name: environment
+          in: query
+          schema: { type: string, enum: [PROD, UAT, DR] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [compliant, drifted, unknown] }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Per-server compliance list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        server:         { $ref: '#/components/schemas/Server' }
+                        complianceStatus: { type: string, enum: [compliant, drifted, unknown] }
+                        openDrifts:     { type: integer }
+                        criticalDrifts: { type: integer }
+                        lastChecked:    { type: string, format: date-time }
+                  total: { type: integer }
+
+  # ── Schedules ─────────────────────────────────────────────────────
+
+  /schedules:
+    get:
+      tags: [Schedules]
+      summary: List validation schedules
+      responses:
+        '200':
+          description: Schedule list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Schedule' } }
+    post:
+      tags: [Schedules]
+      summary: Create a validation schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScheduleInput' }
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Schedule' }
+
+  /schedules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Schedules]
+      summary: Update a schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScheduleInput' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Schedule' }
+          description: Updated schedule
+        '404': { $ref: '#/components/responses/NotFound' }
+
+# ── Components ────────────────────────────────────────────────────
+
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token. Obtain via POST /auth/login.
+
+  schemas:
+
+    Server:
+      type: object
+      properties:
+        _id:              { type: string }
+        hostname:         { type: string, example: TNSI1 }
+        ip:               { type: string, example: 10.0.0.10 }
+        environment:      { type: string, enum: [PROD, UAT, DR] }
+        profileId:        { type: string, nullable: true }
+        status:           { type: string, enum: [active, inactive, decommissioned] }
+        enrollmentStatus: { type: string, enum: [pending, enrolled, revoked] }
+        onboardedAt:      { type: string, format: date-time }
+        lastCheckIn:      { type: string, format: date-time, nullable: true }
+        createdAt:        { type: string, format: date-time }
+        updatedAt:        { type: string, format: date-time }
+
+    ServerProfile:
+      type: object
+      properties:
+        _id:         { type: string }
+        name:        { type: string, example: trading-edge-node-v3 }
+        description: { type: string }
+        collectorConfig:
+          type: array
+          items:
+            type: object
+            properties:
+              category:   { type: string }
+              enabled:    { type: boolean }
+              watchPaths: { type: array, items: { type: string } }
+        defaultBaselineId: { type: string, nullable: true }
+        tags:        { type: array, items: { type: string } }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+
+    Baseline:
+      type: object
+      properties:
+        _id:        { type: string }
+        scope:      { type: string, enum: [server, profile] }
+        scopeId:    { type: string, description: ObjectId of Server or ServerProfile }
+        version:    { type: string, example: 1.0.3 }
+        checksum:   { type: string, description: SHA-256 of the full normalized snapshot }
+        createdBy:  { type: string }
+        createdAt:  { type: string, format: date-time }
+        approvedBy: { type: string, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+
+    ConfigItem:
+      type: object
+      properties:
+        _id:           { type: string }
+        baselineId:    { type: string }
+        category:      { type: string, enum: [sysctl, cpu, irq, nic, ha, ntp, memory, custom_files] }
+        parameter:     { type: string, example: net.core.rmem_max }
+        expectedValue: { description: The baseline value — type varies by category }
+        dataType:      { type: string, enum: [string, number, boolean, object] }
+
+    Drift:
+      type: object
+      properties:
+        _id:            { type: string }
+        serverId:       { type: string }
+        category:       { type: string, enum: [sysctl, cpu, irq, nic, ha, ntp, memory, custom_files] }
+        parameter:      { type: string, example: net.core.rmem_max }
+        baselineValue:  { description: Expected value from baseline }
+        currentValue:   { description: Actual live value }
+        severity:       { type: string, enum: [INFO, WARNING, CRITICAL] }
+        status:         { type: string, enum: [open, ack, resolved] }
+        acknowledgedBy: { type: string, nullable: true }
+        acknowledgedAt: { type: string, format: date-time, nullable: true }
+        resolvedAt:     { type: string, format: date-time, nullable: true }
+        timestamp:      { type: string, format: date-time }
+
+    Alert:
+      type: object
+      properties:
+        _id:           { type: string }
+        driftIds:      { type: array, items: { type: string } }
+        channel:       { type: string, enum: [monitoring-tool, webhook, dashboard] }
+        monitoringId:  { type: string, nullable: true, pattern: '^\d{5}$' }
+        sentAt:        { type: string, format: date-time, nullable: true }
+        status:        { type: string, enum: [pending, sent, failed, resolved] }
+        failureReason: { type: string, nullable: true }
+        createdAt:     { type: string, format: date-time }
+
+    Audit:
+      type: object
+      properties:
+        _id:           { type: string }
+        user:          { type: string }
+        action:        { type: string, example: BASELINE_APPROVED }
+        entity:        { type: string, example: Baseline }
+        entityId:      { type: string }
+        previousValue: { description: Value before the change }
+        newValue:      { description: Value after the change }
+        timestamp:     { type: string, format: date-time }
+        ipAddress:     { type: string, nullable: true }
+
+    AgentEnrollment:
+      type: object
+      properties:
+        _id:       { type: string }
+        serverId:  { type: string }
+        issuedAt:  { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        rotatedAt: { type: string, format: date-time, nullable: true }
+        status:    { type: string, enum: [active, revoked, expired] }
+
+    MonitorCard:
+      type: object
+      properties:
+        _id:               { type: string }
+        label:             { type: string, example: PROD TNSI1 — sysctl critical }
+        monitoringId:      { type: string, pattern: '^\d{5}$', example: '12345' }
+        serverId:          { type: string, nullable: true }
+        category:          { type: string, nullable: true, enum: [sysctl, cpu, irq, nic, ha, ntp, memory, custom_files] }
+        severityThreshold: { type: string, enum: [INFO, WARNING, CRITICAL], default: CRITICAL }
+        scriptPath:        { type: string, example: /opt/configguard/scripts/send_signal.sh }
+        isActive:          { type: boolean }
+        createdAt:         { type: string, format: date-time }
+        updatedAt:         { type: string, format: date-time }
+
+    MonitorCardInput:
+      type: object
+      required: [label, monitoringId, scriptPath]
+      properties:
+        label:             { type: string }
+        monitoringId:      { type: string, pattern: '^\d{5}$' }
+        serverId:          { type: string, nullable: true }
+        category:          { type: string, nullable: true }
+        severityThreshold: { type: string, enum: [INFO, WARNING, CRITICAL] }
+        scriptPath:        { type: string }
+        isActive:          { type: boolean }
+
+    Schedule:
+      type: object
+      properties:
+        _id:       { type: string }
+        name:      { type: string, example: Pre-BOD Check }
+        type:      { type: string, enum: [pre-bod, hourly, daily, weekly, custom] }
+        cron:      { type: string, description: Cron expression for custom type }
+        serverId:  { type: string, nullable: true, description: Null means fleet-wide }
+        isActive:  { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    ScheduleInput:
+      type: object
+      required: [name, type]
+      properties:
+        name:     { type: string }
+        type:     { type: string, enum: [pre-bod, hourly, daily, weekly, custom] }
+        cron:     { type: string }
+        serverId: { type: string, nullable: true }
+        isActive: { type: boolean }
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:   { type: string }
+        message: { type: string }
+
+    PaginatedServers:
+      type: object
+      properties:
+        data:  { type: array, items: { $ref: '#/components/schemas/Server' } }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Authentication required or invalid credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Insufficient permissions for this operation
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Resource already exists
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
