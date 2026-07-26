@@ -21,7 +21,7 @@ export default function AddServerModal({ open, onClose, onSuccess }: AddServerMo
   const [formData, setFormData] = useState<RegisterServerData>({
     hostname: '',
     ip: '',
-    environment: 'production',
+    environment: 'PROD',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export default function AddServerModal({ open, onClose, onSuccess }: AddServerMo
     try {
       const response = await registerServer(formData);
       onSuccess(response);
-      setFormData({ hostname: '', ip: '', environment: 'production' });
+      setFormData({ hostname: '', ip: '', environment: 'PROD' });
     } catch (err: any) {
       setError(err.message || 'Failed to register server');
     } finally {
@@ -78,9 +78,9 @@ export default function AddServerModal({ open, onClose, onSuccess }: AddServerMo
             disabled={loading}
             sx={{ mt: 2 }}
           >
-            <MenuItem value="production">Production</MenuItem>
-            <MenuItem value="staging">Staging</MenuItem>
-            <MenuItem value="development">Development</MenuItem>
+            <MenuItem value="PROD">Production</MenuItem>
+            <MenuItem value="UAT">UAT</MenuItem>
+            <MenuItem value="DR">DR (Disaster Recovery)</MenuItem>
           </TextField>
         </DialogContent>
         <DialogActions sx={{ p: 2, pt: 0 }}>
