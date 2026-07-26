@@ -7,17 +7,21 @@ services:
   frontend:
     build:
       target: dev
+    ports:
+      - "3000:3000"
     volumes:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost/api
+      - VITE_API_URL=http://localhost:5000/api
       - CHOKIDAR_USEPOLLING=true
     command: npm run dev -- --host 0.0.0.0
 
   backend:
     build:
       target: dev
+    ports:
+      - "5000:5000"
     volumes:
       - ./backend:/app
       - /app/node_modules

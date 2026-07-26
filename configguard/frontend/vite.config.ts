@@ -14,9 +14,9 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     proxy: {
-      // Proxy API calls to backend when running Vite dev server outside Docker
+      // Proxy API calls to backend when running Vite dev server inside Docker
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://backend:5000',
         changeOrigin: true,
       },
     },

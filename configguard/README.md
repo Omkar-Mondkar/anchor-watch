@@ -33,9 +33,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
 Services started:
+- **frontend** → http://localhost:3000 (React app, hot-reload via Vite dev server)
+- **backend** → http://localhost:5000 (Express API, hot-reload via nodemon)
 - **nginx** → https://localhost (TLS) / http://localhost (redirects to HTTPS)
-- **frontend** → React app (hot-reload via Vite dev server)
-- **backend** → Express API on :5000 (hot-reload via nodemon)
 - **mongodb** → :27017 (internal only)
 - **redis** → :6379 (internal only)
 - **mongo-express** → http://localhost:8081 (DB admin UI, dev only)
