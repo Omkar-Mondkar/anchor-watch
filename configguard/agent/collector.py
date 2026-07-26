@@ -41,6 +41,15 @@ def main(server_id: str, api_url: str, token: str, dry_run: bool) -> None:
     logger.info(f"Starting collector — server_id={server_id}, api_url={api_url}")
     logger.info(f"Registered collectors: {registry.registered}")
 
+    if not token:
+        from pathlib import Path
+        token_file = Path(__file__).parent / '.agent_token'
+        if token_file.exists():
+            token = token_file.read_text().strip()
+            logger.info("Loaded agent token from .agent_token")
+        else:
+            logger.warning("No token provided and .agent_token not found.")
+
     # Step 1: Collect from all modules
     raw = registry.run_all()
     logger.info(f"Collection complete — categories: {list(raw.keys())}")

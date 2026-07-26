@@ -17,12 +17,13 @@ app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 // ── Routes ────────────────────────────────────────────────────────
 app.use('/api', require('./routes/health'));
 
+app.use('/api/servers', require('./routes/server.routes'));
+app.use('/api/agents', require('./routes/agent.routes'));
+
 // Placeholder 501 route groups — implemented in later changes
 const PENDING_ROUTES = [
   '/api/auth',
-  '/api/servers',
   '/api/profiles',
-  '/api/agent',
   '/api/baselines',
   '/api/drift',
   '/api/alerts',
