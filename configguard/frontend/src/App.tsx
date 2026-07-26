@@ -22,10 +22,10 @@ export default function App() {
         component="main"
         sx={{
           flexGrow: 1,
-          ml: `${SIDEBAR_WIDTH}px`,
           display: 'flex',
           flexDirection: 'column',
           minHeight: '100vh',
+          width: `calc(100% - ${SIDEBAR_WIDTH}px)`,
         }}
       >
         <Header />

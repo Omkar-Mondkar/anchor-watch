@@ -11,23 +11,5 @@ html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0B1220;
-  color: #E2E8F0;
   font-family: 'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #0B1220;
-}
-::-webkit-scrollbar-thumb {
-  background: #1E293B;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
 }

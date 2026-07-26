@@ -1,33 +1,7 @@
-import { createTheme } from '@mui/material/styles';
+import { createTheme, PaletteMode, ThemeOptions } from '@mui/material/styles';
 
-// ConfigGuard dark operational theme
-// Colours from PRD §14 UI/UX Requirements
-const configGuardTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    background: {
-      default: '#0B1220',
-      paper:   '#111827',
-    },
-    primary: {
-      main: '#3B82F6',
-      contrastText: '#ffffff',
-    },
-    success: {
-      main: '#22C55E',
-    },
-    warning: {
-      main: '#F59E0B',
-    },
-    error: {
-      main: '#EF4444',
-    },
-    text: {
-      primary:   '#E2E8F0',
-      secondary: '#64748B',
-    },
-    divider: '#1E293B',
-  },
+// Common Typography and Components that apply to both modes
+const getCommonThemeOptions = (mode: PaletteMode): ThemeOptions => ({
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica Neue", Arial, sans-serif',
     h1: { fontWeight: 700 },
@@ -42,23 +16,31 @@ const configGuardTheme = createTheme({
   },
   components: {
     MuiCssBaseline: {
-      styleOverrides: {
+      styleOverrides: (themeParam) => ({
         body: {
-          backgroundColor: '#0B1220',
-          scrollbarColor: '#1E293B #0B1220',
-          '&::-webkit-scrollbar': { width: '8px' },
-          '&::-webkit-scrollbar-track': { background: '#0B1220' },
-          '&::-webkit-scrollbar-thumb': { background: '#1E293B', borderRadius: '4px' },
+          backgroundColor: themeParam.palette.background.default,
+          color: themeParam.palette.text.primary,
+          // CSS scrollbars adapting to the theme
+          scrollbarColor: `${themeParam.palette.divider} ${themeParam.palette.background.default}`,
+          '&::-webkit-scrollbar': { width: '8px', height: '8px' },
+          '&::-webkit-scrollbar-track': { background: themeParam.palette.background.default },
+          '&::-webkit-scrollbar-thumb': {
+            background: themeParam.palette.divider,
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            background: mode === 'dark' ? '#334155' : '#CBD5E1',
+          },
         },
-      },
+      }),
     },
     MuiPaper: {
       styleOverrides: {
-        root: {
+        root: ({ theme }) => ({
           backgroundImage: 'none',
-          backgroundColor: '#111827',
-          border: '1px solid #1E293B',
-        },
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
+        }),
       },
     },
     MuiButton: {
@@ -78,37 +60,61 @@ const configGuardTheme = createTheme({
     },
     MuiTableCell: {
       styleOverrides: {
-        root: {
-          borderColor: '#1E293B',
-        },
-        head: {
-          backgroundColor: '#0B1220',
-          color: '#64748B',
+        root: ({ theme }) => ({
+          borderColor: theme.palette.divider,
+        }),
+        head: ({ theme }) => ({
+          backgroundColor: theme.palette.background.default,
+          color: theme.palette.text.secondary,
           fontWeight: 600,
           fontSize: '0.75rem',
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
-        },
+        }),
       },
     },
     MuiDrawer: {
       styleOverrides: {
-        paper: {
-          backgroundColor: '#0B1220',
-          borderRight: '1px solid #1E293B',
-        },
+        paper: ({ theme }) => ({
+          backgroundColor: theme.palette.background.default,
+          borderRight: `1px solid ${theme.palette.divider}`,
+        }),
       },
     },
     MuiAppBar: {
       styleOverrides: {
-        root: {
-          backgroundColor: '#111827',
-          borderBottom: '1px solid #1E293B',
+        root: ({ theme }) => ({
+          backgroundColor: theme.palette.background.paper,
+          borderBottom: `1px solid ${theme.palette.divider}`,
           boxShadow: 'none',
-        },
+        }),
       },
     },
   },
 });
 
-export default configGuardTheme;
+export const getDesignTokens = (mode: PaletteMode) => {
+  const isDark = mode === 'dark';
+  return createTheme({
+    palette: {
+      mode,
+      primary: {
+        main: '#3B82F6',
+        contrastText: '#ffffff',
+      },
+      success: { main: '#22C55E' },
+      warning: { main: '#F59E0B' },
+      error: { main: '#EF4444' },
+      background: {
+        default: isDark ? '#0B1220' : '#F8FAFC',
+        paper: isDark ? '#111827' : '#FFFFFF',
+      },
+      text: {
+        primary: isDark ? '#E2E8F0' : '#0F172A',
+        secondary: isDark ? '#64748B' : '#475569',
+      },
+      divider: isDark ? '#1E293B' : '#E2E8F0',
+    },
+    ...getCommonThemeOptions(mode),
+  });
+};

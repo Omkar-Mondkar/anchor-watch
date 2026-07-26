@@ -1,6 +1,7 @@
-import { AppBar, Toolbar, Typography, Box, IconButton, Chip, Tooltip } from '@mui/material'
-import { Notifications, AccountCircle, Refresh } from '@mui/icons-material'
+import { AppBar, Toolbar, Typography, Box, IconButton, Chip, Tooltip, useTheme } from '@mui/material'
+import { Notifications, AccountCircle, Refresh, LightMode, DarkMode } from '@mui/icons-material'
 import { useLocation } from 'react-router-dom'
+import { useThemeContext } from '../../context/ThemeContext'
 
 const pageTitles: Record<string, { title: string; subtitle: string }> = {
   '/':          { title: 'Operations Dashboard', subtitle: 'Fleet-wide health overview' },
@@ -13,6 +14,9 @@ const pageTitles: Record<string, { title: string; subtitle: string }> = {
 
 export default function Header() {
   const location = useLocation()
+  const theme = useTheme()
+  const { mode, toggleColorMode } = useThemeContext()
+
   const pageInfo = pageTitles[location.pathname] ?? { title: 'ConfigGuard', subtitle: '' }
   const now = new Date().toLocaleString('en-GB', {
     weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
@@ -42,6 +46,15 @@ export default function Header() {
         />
 
         {/* Actions */}
+        <Tooltip title={mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+          <IconButton size="small" onClick={toggleColorMode}>
+            {mode === 'dark' ? (
+              <LightMode fontSize="small" sx={{ color: 'text.secondary' }} />
+            ) : (
+              <DarkMode fontSize="small" sx={{ color: 'text.secondary' }} />
+            )}
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Refresh">
           <IconButton size="small" onClick={() => window.location.reload()}>
             <Refresh fontSize="small" sx={{ color: 'text.secondary' }} />
