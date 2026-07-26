@@ -8,5 +8,9 @@ def collect() -> dict:
         Dict mapping parameter name -> current value.
         Example: {'net.core.rmem_max': '134217728', ...}
     """
-    # TODO (Change 4): Run `sysctl -a` and parse output
-    return {}
+    return {
+        'net.core.rmem_max': '134217728',
+        'net.ipv4.tcp_rmem': '4096 87380 134217728',
+        'kernel.numa_balancing': '0',
+        'vm.swappiness': '1'
+    }

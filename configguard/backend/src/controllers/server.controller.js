@@ -67,3 +67,16 @@ exports.registerServer = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Get all registered servers.
+ * GET /api/servers
+ */
+exports.getServers = async (req, res, next) => {
+  try {
+    const servers = await Server.find().sort({ createdAt: -1 });
+    res.json({ servers });
+  } catch (error) {
+    next(error);
+  }
+};

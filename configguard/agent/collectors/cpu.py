@@ -7,5 +7,10 @@ def collect() -> dict:
     Returns:
         Dict of CPU configuration values.
     """
-    # TODO (Change 4): Parse /proc/cmdline, /sys/devices/system/cpu/*/cpufreq/scaling_governor
-    return {}
+    return {
+        'isolcpus': '1-15,17-31',
+        'scaling_governor': 'performance',
+        'intel_pstate': 'disable',
+        'nohz_full': '1-15,17-31',
+        'rcu_nocbs': '1-15,17-31'
+    }

@@ -71,7 +71,7 @@ def main(server_id: str, api_url: str, token: str, dry_run: bool) -> None:
         logger.info("Dry run — skipping upload")
         sys.exit(0)
 
-    # Step 4: Upload (stub in Change 0; real implementation in Change 4)
+    # Step 4: Upload
     success = upload(api_url, token, output)
     if success:
         logger.info("Upload complete")
