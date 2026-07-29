@@ -13,4 +13,8 @@ router.get('/', serverController.getServers);
 // Delete a server
 router.delete('/:id', serverController.deleteServer);
 
+// Mount server-specific snapshot/drift routes
+const snapshotRoutes = require('./snapshot.routes');
+router.use('/:id', snapshotRoutes);
+
 module.exports = router;
