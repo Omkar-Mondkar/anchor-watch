@@ -80,3 +80,28 @@ exports.getServers = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * Delete a server and its enrollment records.
+ * DELETE /api/servers/:id
+ */
+exports.deleteServer = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const server = await Server.findById(id);
+    if (!server) {
+      return res.status(404).json({ error: 'Server not found' });
+    }
+
+    // Remove associated enrollment records
+    await AgentEnrollment.deleteMany({ serverId: id });
+
+    // Remove the server
+    await Server.findByIdAndDelete(id);
+
+    return res.json({ message: `Server '${server.hostname}' deleted successfully` });
+  } catch (error) {
+    next(error);
+  }
+};

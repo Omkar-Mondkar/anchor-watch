@@ -10,4 +10,7 @@ router.post('/', serverController.registerServer);
 // Get all servers
 router.get('/', serverController.getServers);
 
+// Delete a server
+router.delete('/:id', serverController.deleteServer);
+
 module.exports = router;

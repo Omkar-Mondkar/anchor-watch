@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { 
-  Box, Typography, Button, Paper, 
+  Box, Typography, Button, Paper, IconButton, Tooltip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Chip, CircularProgress
+  Chip, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material'
-import { Dns, Add } from '@mui/icons-material'
-import { getServers, Server, RegisterServerResponse } from '../api/serverApi'
+import { Dns, Add, Delete } from '@mui/icons-material'
+import { getServers, deleteServer, Server, RegisterServerResponse } from '../api/serverApi'
 import AddServerModal from '../components/servers/AddServerModal'
 import TokenDisplayModal from '../components/servers/TokenDisplayModal'
 
@@ -18,6 +18,11 @@ export default function Servers() {
   const [tokenModalOpen, setTokenModalOpen] = useState(false)
   const [newToken, setNewToken] = useState('')
   const [newHostname, setNewHostname] = useState('')
+  const [newServerId, setNewServerId] = useState('')
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [serverToDelete, setServerToDelete] = useState<Server | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const fetchServers = async () => {
     setLoading(true)
@@ -39,8 +44,29 @@ export default function Servers() {
     setAddModalOpen(false)
     setNewToken(response.enrollmentToken)
     setNewHostname(response.server.hostname)
+    setNewServerId(response.server.id)
     setTokenModalOpen(true)
-    fetchServers() // Refresh the list
+    fetchServers()
+  }
+
+  const handleDeleteClick = (server: Server) => {
+    setServerToDelete(server)
+    setDeleteConfirmOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!serverToDelete) return
+    setDeleting(true)
+    try {
+      await deleteServer(serverToDelete._id)
+      fetchServers()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setDeleting(false)
+      setDeleteConfirmOpen(false)
+      setServerToDelete(null)
+    }
   }
 
   return (
@@ -73,25 +99,26 @@ export default function Servers() {
               <TableCell sx={{ fontWeight: 600 }}>Environment</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 600 }}>Added</TableCell>
+              <TableCell sx={{ fontWeight: 600 }} align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                   <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
             ) : servers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                <TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                   No servers onboarded yet. Click "Add Server" to begin.
                 </TableCell>
               </TableRow>
             ) : (
               servers.map((server) => (
                 <TableRow key={server._id} hover>
-                  <TableCell fontWeight={500}>{server.hostname}</TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>{server.hostname}</TableCell>
                   <TableCell>{server.ip}</TableCell>
                   <TableCell>
                     <Chip 
@@ -109,8 +136,19 @@ export default function Servers() {
                       sx={{ textTransform: 'capitalize' }}
                     />
                   </TableCell>
-                  <TableCell color="text.secondary">
+                  <TableCell sx={{ color: 'text.secondary' }}>
                     {new Date(server.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Delete server">
+                      <IconButton 
+                        size="small" 
+                        color="error"
+                        onClick={() => handleDeleteClick(server)}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))
@@ -130,7 +168,27 @@ export default function Servers() {
         onClose={() => setTokenModalOpen(false)}
         token={newToken}
         hostname={newHostname}
+        serverId={newServerId}
       />
+
+      {/* Delete confirmation */}
+      <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+        <DialogTitle>Delete Server</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete <strong>{serverToDelete?.hostname}</strong>? 
+            This will also remove its enrollment records.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={deleting} color="inherit">
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} color="error" variant="contained" disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

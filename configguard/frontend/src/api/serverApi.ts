@@ -45,3 +45,14 @@ export const registerServer = async (data: RegisterServerData): Promise<Register
   
   return response.json();
 };
+
+export const deleteServer = async (serverId: string): Promise<void> => {
+  const response = await fetch(`/api/servers/${serverId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to delete server');
+  }
+};
